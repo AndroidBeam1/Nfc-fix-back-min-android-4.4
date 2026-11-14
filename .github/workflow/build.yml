@@ -1,0 +1,63 @@
+name: "NFC Beam - I'm working"
+
+run-name: "NFC Beam build #${{ github.run_number }} is working"
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build the APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Get the repo files
+        uses: actions/checkout@v5
+
+      - name: Find and unzip the project
+        run: |
+          ZIP=$(ls *.zip | head -n 1)
+          echo "Using $ZIP"
+          mkdir proj
+          unzip -q -o "$ZIP" -d proj
+          SETTINGS=$(find proj \( -name settings.gradle.kts -o -name settings.gradle \) | head -n 1)
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Accept Android licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 8.7
+
+      - name: Build the APK
+        run: gradle -p "$PROJECT_DIR" assembleDebug --no-daemon --stacktrace
+
+      - name: Name the APK
+        run: cp "$(find "$PROJECT_DIR" -name '*.apk' | head -n 1)" nfc-beam.apk
+
+      - name: Keep a backup copy
+        uses: actions/upload-artifact@v6
+        with:
+          name: nfc-beam-apk
+          path: nfc-beam.apk
+
+      - name: Publish as a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" nfc-beam.apk \
+            --title "NFC Beam build ${{ github.run_number }}" \
+            --notes "Tap nfc-beam.apk below to download and install." \
+            --target "${{ github.sha }}"
