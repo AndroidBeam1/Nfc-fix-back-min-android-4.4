@@ -1,0 +1,1 @@
+# Nfc-fix-back-min-android-4.4
